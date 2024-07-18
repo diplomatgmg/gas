@@ -1,10 +1,23 @@
+import time
 from datetime import datetime
 
 from base import Credential
 from gas_station_system import GasStationSystem
 
 
-if __name__ == "__main__":
+def timeit(function):
+    def wrapped(*args, **kwargs):
+        start_time = time.perf_counter()
+        res = function(*args, **kwargs)
+        total = time.perf_counter() - start_time
+        print(f"total - {round(total, 2)} seconds")
+        return res
+
+    return wrapped
+
+
+@timeit
+def main():
     cred = Credential(
         url="https://test-app.avtoversant.ru",
         login="test",
@@ -22,3 +35,7 @@ if __name__ == "__main__":
 
     for tr in transactions[:10]:
         print(tr)
+
+
+if __name__ == "__main__":
+    main()
