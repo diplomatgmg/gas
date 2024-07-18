@@ -1,7 +1,6 @@
 from datetime import datetime
-
 from bs4 import BeautifulSoup
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from base import (
     BaseSystem,
     Credential,
@@ -33,15 +32,9 @@ class GasStationSystem(BaseSystem):
         self._get_response(
             "post", login_url, skip_credential=True, json=data, headers=headers
         )
-
         super().auth(credential)
 
     def save_stations(self) -> None:
-        """
-        Получает все станции и возвращает их в виде словаря
-        Ключ - id станции
-        Значение - словарь с данными о станции
-        """
         stations_url = f"{self.base_url}/abakam/gasstations/stations"
         response = self._get_response("get", stations_url)
         stations = response.json()
@@ -65,27 +58,42 @@ class GasStationSystem(BaseSystem):
         soup = BeautifulSoup(response.text, "lxml")
         count_pages = self._extract_page_count(soup)
 
-        for page in range(1, count_pages + 1):
-            data["page"] = page
+        with ThreadPoolExecutor() as executor:
+            future_to_page = {
+                executor.submit(
+                    self._fetch_transactions_page, transactions_url, data, page
+                ): page
+                for page in range(1, count_pages + 1)
+            }
 
-            response = self._get_response("post", transactions_url, json=data)
-            soup = BeautifulSoup(response.text, "lxml")
-            rows = soup.find_all("tr")
-
-            for row in rows:
-                if "Пополнение" in row.text:
-                    continue
-
-                transaction = self._parse_transaction_row(row)
-                if transaction:
-                    transactions.append(transaction)
+            for future in as_completed(future_to_page):
+                page_transactions = future.result()
+                transactions.extend(page_transactions)
 
         return transactions
+
+    def _fetch_transactions_page(
+        self, transactions_url: str, data: dict, page: int
+    ) -> list[Transaction]:
+        data["page"] = page
+        response = self._get_response("post", transactions_url, json=data)
+        soup = BeautifulSoup(response.text, "lxml")
+        rows = soup.find_all("tr")
+
+        page_transactions = []
+        for row in rows:
+            if "Пополнение" in row.text:
+                continue
+
+            transaction = self._parse_transaction_row(row)
+            if transaction:
+                page_transactions.append(transaction)
+
+        return page_transactions
 
     @staticmethod
     def _extract_page_count(soup: BeautifulSoup) -> int:
         page_elements = soup.find_all("li", {"class": "page-item"})
-        # Если транзакций за выбранный период нет, то не будет пагинации
         if not page_elements:
             return 1
         return int(page_elements[-2].get_text(strip=True))
@@ -104,12 +112,10 @@ class GasStationSystem(BaseSystem):
 
         contracts = self.credential.contracts
         if contracts and contract not in contracts:
-            # Если транзакция не подходит под выбранные контракты
             return None
 
         station_dict = self.stations.get(station_code)
         if not station_dict:
-            # Станция может быть удалена и не отображаться на карте leaflet
             return None
 
         point = Point(lat=station_dict.get("lat"), lng=station_dict.get("lng"))
