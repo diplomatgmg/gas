@@ -62,14 +62,14 @@ class GasStationSystem(BaseSystem):
         }
 
         response = self._get_response("post", transactions_url, json=data)
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(response.text, "lxml")
         count_pages = self._extract_page_count(soup)
 
         for page in range(1, count_pages + 1):
             data["page"] = page
 
             response = self._get_response("post", transactions_url, json=data)
-            soup = BeautifulSoup(response.text, "html.parser")
+            soup = BeautifulSoup(response.text, "lxml")
             rows = soup.find_all("tr")
 
             for row in rows:
