@@ -65,9 +65,13 @@ class GasStationSystem(BaseSystem):
 
         response = self.connection.post(transactions_url, json=data)
         soup = BeautifulSoup(response.text, "html.parser")
-        count_pages = int(
-            soup.find_all("li", {"class": "page-item"})[-2].get_text(strip=True)
-        )
+
+        page_elements = soup.find_all("li", {"class": "page-item"})
+        # Если транзакций за выбранный период нет, то не будет пагинации
+        if not page_elements:
+            count_pages = 1
+        else:
+            count_pages = int(page_elements[-2].get_text(strip=True))
 
         for page in range(1, count_pages + 1):
             data["page"] = page
