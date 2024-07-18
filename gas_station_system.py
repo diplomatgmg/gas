@@ -6,7 +6,6 @@ from base import (
     BaseSystem,
     Credential,
     Transaction,
-    InvalidCredentialsError,
     Station,
     Point,
 )
@@ -30,10 +29,9 @@ class GasStationSystem(BaseSystem):
             "remember": 1,
         }
 
-        response = self.connection.post(login_url, json=data, headers=headers)
-
-        if response.status_code != 200:
-            raise InvalidCredentialsError()
+        self._get_response(
+            "post", login_url, skip_credential=True, json=data, headers=headers
+        )
 
         super().auth(credential)
 
@@ -44,7 +42,7 @@ class GasStationSystem(BaseSystem):
         Значение - словарь с данными о станции
         """
         stations_url = f"{self.base_url}/abakam/gasstations/stations"
-        response = self.connection.get(stations_url)
+        response = self._get_response("get", stations_url)
         stations = response.json()
         stations_dict = {str(station["id"]): station for station in stations}
         return stations_dict
@@ -63,8 +61,9 @@ class GasStationSystem(BaseSystem):
             "end_time": str(to_date.time()),
         }
 
-        response = self.connection.post(transactions_url, json=data)
+        response = self._get_response("post", transactions_url, json=data)
         soup = BeautifulSoup(response.text, "html.parser")
+
         count_pages = int(
             soup.find_all("li", {"class": "page-item"})[-2].get_text(strip=True)
         )
@@ -72,7 +71,7 @@ class GasStationSystem(BaseSystem):
         for page in range(1, count_pages + 1):
             data["page"] = page
 
-            response = self.connection.post(transactions_url, json=data)
+            response = self._get_response("post", transactions_url, json=data)
             soup = BeautifulSoup(response.text, "html.parser")
 
             rows = soup.find_all("tr")

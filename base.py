@@ -1,6 +1,7 @@
-from datetime import datetime
-import requests
 from dataclasses import dataclass
+from datetime import datetime
+
+import requests
 
 
 @dataclass
@@ -43,6 +44,10 @@ class InvalidCredentialsError(Exception):
     pass
 
 
+class NotAuthorizedError(Exception):
+    pass
+
+
 class BaseSystem:
     base_url: str = None
     credential = None
@@ -57,3 +62,20 @@ class BaseSystem:
         self, from_date: datetime, to_date: datetime
     ) -> list[Transaction]:
         raise NotImplementedError()
+
+    def _get_response(
+        self, method, url, skip_credential=False, *args, **kwargs
+    ) -> requests.Response:
+        if not skip_credential and self.credential is None:
+            raise NotAuthorizedError("Необходимо авторизоваться")
+
+        response = self.connection.request(method, url, *args, **kwargs)
+
+        if response.status_code == 500:
+            raise InvalidCredentialsError(
+                f"HTTP {response.status_code}: {response.text}"
+            )
+
+        response.raise_for_status()
+
+        return response
